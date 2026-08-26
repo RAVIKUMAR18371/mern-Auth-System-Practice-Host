@@ -18,6 +18,12 @@ router.post(
   authController.register.bind(authController)
 );
 
+router.post(
+  "/refresh",
+  authController.refresh.bind(authController)
+);
+
+
 // LOGIN
 router.post(
   "/login",

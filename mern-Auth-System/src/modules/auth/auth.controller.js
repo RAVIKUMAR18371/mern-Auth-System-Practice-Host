@@ -2,6 +2,14 @@ const userService = require("../user/user.service");
 const otpService = require("../otp/otp.service");
 
 const {
+  generateRefreshToken,
+  verifyRefreshToken,
+} = require("../../utils/refresh-token");
+
+const sessionService =
+  require("../session/session.service");
+
+const {
   validateCreateUser,
 } = require("../../validators/user.validators");
 
@@ -22,6 +30,57 @@ const {
 } = require("../../utils/jwt");
 
 class AuthController {
+
+  async refresh(req, res) {
+  try {
+    const refreshToken =
+      req.cookies.refreshToken;
+
+    if (!refreshToken) {
+      return res.status(401).json({
+        success: false,
+        message: "Refresh token required",
+      });
+    }
+
+    // Verify JWT
+    const decoded =
+      verifyRefreshToken(refreshToken);
+
+    // Check session in database
+    const session =
+      await sessionService.findByRefreshToken(
+        refreshToken
+      );
+
+    if (!session) {
+      return res.status(401).json({
+        success: false,
+        message: "Session expired or revoked",
+      });
+    }
+
+    // Generate new access token
+    const accessToken =
+      generateAccessToken({
+        userId: decoded.userId,
+        role: decoded.role,
+      });
+
+    return res.status(200).json({
+      success: true,
+      message: "Access token refreshed successfully",
+      data: {
+        accessToken,
+      },
+    });
+  } catch (error) {
+    return res.status(401).json({
+      success: false,
+      message: "Invalid or expired refresh token",
+    });
+  }
+}
 
   async register(req, res) {
     try {
@@ -185,6 +244,30 @@ class AuthController {
           userId: user._id.toString(),
           role: user.role,
         });
+      
+      const refreshToken = generateRefreshToken({
+      userId: user._id.toString(),
+       role: user.role,
+      });
+
+      const expiresAt = new Date(
+       Date.now() + 7 * 24 * 60 * 60 * 1000
+        );
+
+    await sessionService.createSession(
+     user._id,
+     refreshToken,
+      expiresAt
+      );
+
+      res.cookie("refreshToken", refreshToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+       sameSite: "strict",
+      maxAge: 7 * 24 * 60 * 60 * 1000,
+    });
+      
+      
 
       // 6. Return successful login response
       return res.status(200).json({
