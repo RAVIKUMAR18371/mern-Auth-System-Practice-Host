@@ -213,10 +213,8 @@ class AuthController {
       });
     }
     }
-    // ==========================================
-// GET CURRENT USER
-// ==========================================
-
+   
+    // Get the current user
 async me(req, res) {
   try {
     // req.user comes from authenticate middleware
