@@ -1,7 +1,7 @@
 const crypto = require("crypto");
 
 const otpRepository = require("./otp.repository");
-const {generateOtp} = require("../../utils/otp")
+
 const {
   hashPassword,
   comparePassword,
@@ -9,7 +9,12 @@ const {
 
 const AppError = require("../../utils/app-error");
 
+const emailService = require("../../services/email.service");
+
+
+
 class OtpService {
+
   // ==========================================
   // GENERATE OTP
   // ==========================================
@@ -25,14 +30,14 @@ class OtpService {
   // ==========================================
 
   async createOtp(userId) {
+
     // Delete previous OTP
     await otpRepository.deleteByUserId(userId);
 
-    // Generate new 6-digit OTP
+    // Generate new OTP
     const code = this.generateOtp();
 
-    // Development-only OTP logging
-    // NEVER use this in production
+    // Development OTP
     if (process.env.NODE_ENV === "development") {
       console.log("=================================");
       console.log("DEV OTP:", code);
@@ -40,15 +45,16 @@ class OtpService {
       console.log("=================================");
     }
 
-    // Hash OTP before storing in database
-    const hashedCode = await hashPassword(code);
+    // Hash OTP before storing
+    const hashedCode =
+      await hashPassword(code);
 
-    // OTP expires after 10 minutes
+    // OTP expires in 10 minutes
     const expiresAt = new Date(
       Date.now() + 10 * 60 * 1000
     );
 
-    // Store hashed OTP
+    // Save OTP
     await otpRepository.create({
       userId,
       code: hashedCode,
@@ -56,58 +62,54 @@ class OtpService {
       attempts: 0,
     });
 
-    // Return plaintext OTP to controller
-    // so it can be sent through email in production
+    // Return plaintext OTP
     return {
       code,
       expiresAt,
     };
   }
 
-  //==========================
-  // Resend OTP
-  // ===========================
+  // ==========================================
+  // RESEND OTP
+  // ==========================================
+
   async resendOtp(userId, email) {
   try {
-
-    // 1. Invalidate old OTPs
-    await otpRepository.invalidatePreviousOtps(
-      userId
-    );
+    // 1. Delete previous OTP
+    await otpRepository.deleteByUserId(userId);
 
     // 2. Generate new OTP
-    const otp = generateOtp();
+    const code = this.generateOtp();
 
-    // 3. Set expiry
+    // 3. Hash OTP before storing
+    const hashedCode =
+      await hashPassword(code);
+
+    // 4. OTP expires after 10 minutes
     const expiresAt = new Date(
       Date.now() + 10 * 60 * 1000
     );
 
-    // 4. Save new OTP
+    // 5. Store hashed OTP
     await otpRepository.create({
       userId,
-      otp,
+      code: hashedCode,
       expiresAt,
-      isUsed: false,
+      attempts: 0,
     });
 
-    // 5. Send OTP
+    // 6. Send plaintext OTP to email
     await emailService.sendOtpEmail(
       email,
-      otp
+      code
     );
 
-    // 6. Development logging
-    if (
-      process.env.NODE_ENV !== "production"
-    ) {
-      console.log(
-        `DEV OTP: ${otp}`
-      );
-
-      console.log(
-        `User ID: ${userId}`
-      );
+    // 7. Development logging
+    if (process.env.NODE_ENV !== "production") {
+      console.log("=================================");
+      console.log("RESEND DEV OTP:", code);
+      console.log("User ID:", userId);
+      console.log("=================================");
     }
 
     return {
@@ -115,7 +117,6 @@ class OtpService {
     };
 
   } catch (error) {
-
     console.error(
       "Resend OTP error:",
       error
@@ -130,23 +131,29 @@ class OtpService {
   // ==========================================
 
   async verifyOtp(userId, enteredCode) {
-    // Find latest OTP
-    const otp =
+
+    // 1. Find latest OTP
+    const otpRecord =
       await otpRepository.findLatestByUserId(
         userId
       );
 
-    // OTP doesn't exist
-    if (!otp) {
+    // 2. OTP not found
+    if (!otpRecord) {
       throw new AppError(
         "OTP not found or expired",
         400
       );
     }
 
-    // Check OTP expiration
-    if (otp.expiresAt < new Date()) {
-      await otpRepository.deleteByUserId(userId);
+    // 3. Check expiration
+    if (
+      otpRecord.expiresAt < new Date()
+    ) {
+
+      await otpRepository.deleteByUserId(
+        userId
+      );
 
       throw new AppError(
         "OTP has expired",
@@ -154,9 +161,12 @@ class OtpService {
       );
     }
 
-    // Maximum 5 attempts
-    if (otp.attempts >= 5) {
-      await otpRepository.deleteByUserId(userId);
+    // 4. Maximum attempts
+    if (otpRecord.attempts >= 5) {
+
+      await otpRepository.deleteByUserId(
+        userId
+      );
 
       throw new AppError(
         "Too many incorrect OTP attempts",
@@ -164,17 +174,22 @@ class OtpService {
       );
     }
 
-    // Compare entered OTP with bcrypt hash
-    const isValid = await comparePassword(
-      enteredCode,
-      otp.code
-    );
+    // 5. Compare entered OTP
+    // enteredCode = plain OTP
+    // otpRecord.code = bcrypt hash
 
-    // Wrong OTP
+    const isValid =
+      await comparePassword(
+        enteredCode,
+        otpRecord.code
+      );
+
+    // 6. Wrong OTP
     if (!isValid) {
-      otp.attempts += 1;
 
-      await otp.save();
+      otpRecord.attempts += 1;
+
+      await otpRecord.save();
 
       throw new AppError(
         "Invalid OTP",
@@ -182,8 +197,10 @@ class OtpService {
       );
     }
 
-    // Correct OTP
-    await otpRepository.deleteByUserId(userId);
+    // 7. Correct OTP
+    await otpRepository.deleteByUserId(
+      userId
+    );
 
     return true;
   }
@@ -191,126 +208,3 @@ class OtpService {
 
 module.exports = new OtpService();
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-/*
-const crypto = require("crypto");
-
-const otpRepository = require("./otp.repository");
-
-const {
-  hashPassword,
-  comparePassword,
-} = require("../../utils/password");
-
-const AppError = require("../../utils/app-error");
-
-class OtpService {
-  generateOtp() {
-    return crypto.randomInt(100000, 1000000).toString();
-  }
-
-  async createOtp(userId) {
-    // Remove previous OTP
-    await otpRepository.deleteByUserId(userId);
-
-    // Generate new OTP
-    const code = this.generateOtp();
-
-    // Hash OTP before storing
-    const hashedCode = await hashPassword(code);
-
-    // OTP expires after 10 minutes
-    const expiresAt = new Date(
-      Date.now() + 10 * 60 * 1000
-    );
-
-    await otpRepository.create({
-      userId,
-      code: hashedCode,
-      expiresAt,
-      attempts: 0,
-    });
-
-    // Return plaintext OTP ONLY to the email service
-    return {
-      code,
-      expiresAt,
-    };
-  }
-
-  async verifyOtp(userId, enteredCode) {
-    const otp = await otpRepository.findLatestByUserId(userId);
-
-    if (!otp) {
-      throw new AppError(
-        "OTP not found or expired",
-        400
-      );
-    }
-
-    // Check expiration
-    if (otp.expiresAt < new Date()) {
-      await otpRepository.deleteByUserId(userId);
-
-      throw new AppError(
-        "OTP has expired",
-        400
-      );
-    }
-
-    // Maximum 5 attempts
-    if (otp.attempts >= 5) {
-      await otpRepository.deleteByUserId(userId);
-
-      throw new AppError(
-        "Too many incorrect OTP attempts",
-        429
-      );
-    }
-
-    // Compare entered OTP with bcrypt hash
-    const isValid = await comparePassword(
-      enteredCode,
-      otp.code
-    );
-
-    if (!isValid) {
-      otp.attempts += 1;
-
-      await otp.save();
-
-      throw new AppError(
-        "Invalid OTP",
-        400
-      );
-    }
-
-    // Correct OTP
-    await otpRepository.deleteByUserId(userId);
-
-    return true;
-  }
-}
-
-module.exports = new OtpService();
-*/
