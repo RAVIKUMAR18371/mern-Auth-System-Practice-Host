@@ -1,7 +1,7 @@
 const crypto = require("crypto");
 
 const otpRepository = require("./otp.repository");
-
+const {generateOtp} = require("../../utils/otp")
 const {
   hashPassword,
   comparePassword,
@@ -63,6 +63,67 @@ class OtpService {
       expiresAt,
     };
   }
+
+  //==========================
+  // Resend OTP
+  // ===========================
+  async resendOtp(userId, email) {
+  try {
+
+    // 1. Invalidate old OTPs
+    await otpRepository.invalidatePreviousOtps(
+      userId
+    );
+
+    // 2. Generate new OTP
+    const otp = generateOtp();
+
+    // 3. Set expiry
+    const expiresAt = new Date(
+      Date.now() + 10 * 60 * 1000
+    );
+
+    // 4. Save new OTP
+    await otpRepository.create({
+      userId,
+      otp,
+      expiresAt,
+      isUsed: false,
+    });
+
+    // 5. Send OTP
+    await emailService.sendOtpEmail(
+      email,
+      otp
+    );
+
+    // 6. Development logging
+    if (
+      process.env.NODE_ENV !== "production"
+    ) {
+      console.log(
+        `DEV OTP: ${otp}`
+      );
+
+      console.log(
+        `User ID: ${userId}`
+      );
+    }
+
+    return {
+      success: true,
+    };
+
+  } catch (error) {
+
+    console.error(
+      "Resend OTP error:",
+      error
+    );
+
+    throw error;
+  }
+}
 
   // ==========================================
   // VERIFY OTP

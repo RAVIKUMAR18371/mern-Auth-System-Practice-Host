@@ -18,11 +18,19 @@ router.post(
   authController.register.bind(authController)
 );
 
+// Refresh access Token --> i am taking
 router.post(
   "/refresh",
   authController.refresh.bind(authController)
 );
 
+// Adding the Logout Route
+router.post(
+  "/logout",
+  authController.logout.bind(
+    authController
+  )
+);
 
 // LOGIN
 router.post(
@@ -36,12 +44,23 @@ router.post(
   authController.verifyOtp.bind(authController)
 );
 
+// RESEND OTP
+router.post(
+  "/resend-otp",
+  authController.resendOtp.bind(
+    authController
+  )
+);
+
 // CURRENT USER
 router.get(
   "/me",
   authenticate,
   authController.me.bind(authController)
 );
+
+
+
 
 // ADMIN ONLY
 router.get(

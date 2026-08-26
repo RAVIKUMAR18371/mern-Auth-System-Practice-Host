@@ -80,8 +80,116 @@ class AuthController {
       message: "Invalid or expired refresh token",
     });
   }
+  }
+  
+async resendOtp(req, res) {
+  try {
+
+    const { email } = req.body;
+
+    if (!email) {
+      return res.status(400).json({
+        success: false,
+        message: "Email is required",
+      });
+    }
+
+    // Find user
+    const user =
+      await userService.getUserByEmail(
+        email
+      );
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    // Already verified
+    if (user.isVerified) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Email is already verified",
+      });
+    }
+
+    // Generate and send new OTP
+    await otpService.resendOtp(
+      user._id,
+      user.email
+    );
+
+    return res.status(200).json({
+      success: true,
+      message:
+        "OTP resent successfully",
+    });
+
+  } catch (error) {
+
+    console.error(
+      "Resend OTP controller error:",
+      error
+    );
+
+    return res.status(500).json({
+      success: false,
+      message:
+        error.message ||
+        "Failed to resend OTP",
+    });
+  }
 }
 
+
+  // Logout Function
+  async logout(req, res) {
+  try {
+    const refreshToken =
+      req.cookies.refreshToken;
+
+    // No refresh token
+    if (!refreshToken) {
+      return res.status(200).json({
+        success: true,
+        message: "Already logged out",
+      });
+    }
+
+    // Revoke session in database
+    await sessionService.revokeSession(
+      refreshToken
+    );
+
+    // Clear refresh-token cookie
+    res.clearCookie("refreshToken", {
+      httpOnly: true,
+      secure:
+        process.env.NODE_ENV === "production",
+      sameSite: "strict",
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: "Logout successful",
+    });
+  } catch (error) {
+    console.error(
+      "Logout error:",
+      error
+    );
+
+    return res.status(500).json({
+      success: false,
+      message: "Logout failed",
+    });
+  }
+}
+
+  
   async register(req, res) {
     try {
       // 1. Validate registration data

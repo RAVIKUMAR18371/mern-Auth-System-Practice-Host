@@ -1,25 +1,51 @@
 const OTP = require("./otp.model");
 
-class OtpRepository {
- 
-  async create(otpData) {
-    return OTP.create(otpData);
+class OTPRepository {
+
+  async create(data) {
+    return await OTP.create(data);
   }
 
   async findLatestByUserId(userId) {
-    return OTP.findOne({
+    return await OTP.findOne({
       userId,
+      isUsed: false,
     }).sort({
       createdAt: -1,
     });
   }
 
+  async markAsUsed(otpId) {
+    return await OTP.findByIdAndUpdate(
+      otpId,
+      {
+        isUsed: true,
+      },
+      {
+        new: true,
+      }
+    );
+  }
+
+  async invalidatePreviousOtps(userId) {
+    return await OTP.updateMany(
+      {
+        userId,
+        isUsed: false,
+      },
+      {
+        isUsed: true,
+      }
+    );
+  }
 
   async deleteByUserId(userId) {
-    return OTP.deleteMany({
+    return await OTP.deleteMany({
       userId,
     });
   }
 }
 
-module.exports = new OtpRepository();
+
+
+module.exports = new OTPRepository();
