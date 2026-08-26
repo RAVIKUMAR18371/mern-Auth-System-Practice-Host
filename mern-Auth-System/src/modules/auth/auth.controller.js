@@ -1,5 +1,9 @@
 const userService = require("../user/user.service");
+
 const otpService = require("../otp/otp.service");
+
+const registrationVerificationService =
+  require("../otp/registration-verification.service");
 
 const {
   generateRefreshToken,
@@ -22,220 +26,291 @@ const {
 } = require("../../validators/auth.validators");
 
 const {
-  sendOtpEmail,
-} = require("../../services/email.service");
-
-const {
   generateAccessToken,
 } = require("../../utils/jwt");
 
+
 class AuthController {
 
+  // =====================================================
+  // REFRESH ACCESS TOKEN
+  // =====================================================
+
   async refresh(req, res) {
-  try {
-    const refreshToken =
-      req.cookies.refreshToken;
-
-    if (!refreshToken) {
-      return res.status(401).json({
-        success: false,
-        message: "Refresh token required",
-      });
-    }
-
-    // Verify JWT
-    const decoded =
-      verifyRefreshToken(refreshToken);
-
-    // Check session in database
-    const session =
-      await sessionService.findByRefreshToken(
-        refreshToken
-      );
-
-    if (!session) {
-      return res.status(401).json({
-        success: false,
-        message: "Session expired or revoked",
-      });
-    }
-
-    // Generate new access token
-    const accessToken =
-      generateAccessToken({
-        userId: decoded.userId,
-        role: decoded.role,
-      });
-
-    return res.status(200).json({
-      success: true,
-      message: "Access token refreshed successfully",
-      data: {
-        accessToken,
-      },
-    });
-  } catch (error) {
-    return res.status(401).json({
-      success: false,
-      message: "Invalid or expired refresh token",
-    });
-  }
-  }
-  
-async resendOtp(req, res) {
-  try {
-
-    const { email } = req.body;
-
-    if (!email) {
-      return res.status(400).json({
-        success: false,
-        message: "Email is required",
-      });
-    }
-
-    // Find user
-    const user =
-      await userService.getUserByEmail(
-        email
-      );
-
-    if (!user) {
-      return res.status(404).json({
-        success: false,
-        message: "User not found",
-      });
-    }
-
-    // Already verified
-    if (user.isVerified) {
-      return res.status(400).json({
-        success: false,
-        message:
-          "Email is already verified",
-      });
-    }
-
-    // Generate and send new OTP
-    await otpService.resendOtp(
-      user._id,
-      user.email
-    );
-
-    return res.status(200).json({
-      success: true,
-      message:
-        "OTP resent successfully",
-    });
-
-  } catch (error) {
-
-    console.error(
-      "Resend OTP controller error:",
-      error
-    );
-
-    return res.status(500).json({
-      success: false,
-      message:
-        error.message ||
-        "Failed to resend OTP",
-    });
-  }
-}
-
-
-  // Logout Function
-  async logout(req, res) {
-  try {
-    const refreshToken =
-      req.cookies.refreshToken;
-
-    // No refresh token
-    if (!refreshToken) {
-      return res.status(200).json({
-        success: true,
-        message: "Already logged out",
-      });
-    }
-
-    // Revoke session in database
-    await sessionService.revokeSession(
-      refreshToken
-    );
-
-    // Clear refresh-token cookie
-    res.clearCookie("refreshToken", {
-      httpOnly: true,
-      secure:
-        process.env.NODE_ENV === "production",
-      sameSite: "strict",
-    });
-
-    return res.status(200).json({
-      success: true,
-      message: "Logout successful",
-    });
-  } catch (error) {
-    console.error(
-      "Logout error:",
-      error
-    );
-
-    return res.status(500).json({
-      success: false,
-      message: "Logout failed",
-    });
-  }
-}
-
-  
-  async register(req, res) {
     try {
-      // 1. Validate registration data
-      const { error, value } =
-        validateCreateUser(req.body);
 
-      if (error) {
-        return res.status(400).json({
+      const refreshToken =
+        req.cookies.refreshToken;
+
+      if (!refreshToken) {
+        return res.status(401).json({
           success: false,
-          message: "Validation failed",
-          errors: error.details.map(
-            (detail) => detail.message
-          ),
+          message: "Refresh token required",
         });
       }
 
-      // 2. Create user
-      const user =
-        await userService.createUser(value);
+      // Verify refresh JWT
+      const decoded =
+        verifyRefreshToken(refreshToken);
 
-      // 3. Generate OTP
-      const otp =
-        await otpService.createOtp(user.id);
+      // Check session in database
+      const session =
+        await sessionService.findByRefreshToken(
+          refreshToken
+        );
 
-  
-  await sendOtpEmail(
-    user.email,
-    otp.code
-  );
+      if (!session) {
+        return res.status(401).json({
+          success: false,
+          message:
+            "Session expired or revoked",
+        });
+      }
 
+      // Generate new access token
+      const accessToken =
+        generateAccessToken({
+          userId: decoded.userId,
+          role: decoded.role,
+        });
 
-      // 5. Send response
-      return res.status(201).json({
+      return res.status(200).json({
         success: true,
         message:
-          "User registered successfully. OTP sent to email.",
+          "Access token refreshed successfully",
+
         data: {
-          user,
-          otpExpiresAt: otp.expiresAt,
+          accessToken,
         },
       });
+
     } catch (error) {
+
+      return res.status(401).json({
+        success: false,
+        message:
+          "Invalid or expired refresh token",
+      });
+    }
+  }
+
+
+  // =====================================================
+  // RESEND EXISTING USER OTP
+  // =====================================================
+
+  async resendOtp(req, res) {
+    try {
+
+      const { email } = req.body;
+
+      if (!email) {
+        return res.status(400).json({
+          success: false,
+          message: "Email is required",
+        });
+      }
+
+      // Find user
+      const user =
+        await userService.getUserByEmail(
+          email
+        );
+
+      if (!user) {
+        return res.status(404).json({
+          success: false,
+          message: "User not found",
+        });
+      }
+
+      // Already verified
+      if (user.isVerified) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "Email is already verified",
+        });
+      }
+
+      // Generate and send new OTP
+      await otpService.resendOtp(
+        user._id,
+        user.email
+      );
+
+      return res.status(200).json({
+        success: true,
+        message:
+          "OTP resent successfully",
+      });
+
+    } catch (error) {
+
+      console.error(
+        "Resend OTP controller error:",
+        error
+      );
+
       return res.status(
         error.statusCode || 500
       ).json({
         success: false,
+        message:
+          error.message ||
+          "Failed to resend OTP",
+      });
+    }
+  }
+
+
+  // =====================================================
+  // LOGOUT
+  // =====================================================
+
+  async logout(req, res) {
+    try {
+
+      const refreshToken =
+        req.cookies.refreshToken;
+
+      // No refresh token
+      if (!refreshToken) {
+        return res.status(200).json({
+          success: true,
+          message: "Already logged out",
+        });
+      }
+
+      // Revoke session in database
+      await sessionService.revokeSession(
+        refreshToken
+      );
+
+      // Clear refresh-token cookie
+      res.clearCookie(
+        "refreshToken",
+        {
+          httpOnly: true,
+
+          secure:
+            process.env.NODE_ENV ===
+            "production",
+
+          sameSite: "strict",
+        }
+      );
+
+      return res.status(200).json({
+        success: true,
+        message: "Logout successful",
+      });
+
+    } catch (error) {
+
+      console.error(
+        "Logout error:",
+        error
+      );
+
+      return res.status(500).json({
+        success: false,
+        message: "Logout failed",
+      });
+    }
+  }
+
+
+  // =====================================================
+  // REGISTER
+  // =====================================================
+
+  async register(req, res) {
+
+    try {
+
+      // =================================================
+      // 1. VALIDATE REGISTRATION DATA
+      // =================================================
+
+      const { error, value } =
+        validateCreateUser(req.body);
+
+      if (error) {
+
+        return res.status(400).json({
+          success: false,
+          message: "Validation failed",
+
+          errors:
+            error.details.map(
+              (detail) =>
+                detail.message
+            ),
+        });
+      }
+
+
+      // =================================================
+      // 2. CHECK EMAIL + PHONE VERIFICATION
+      // =================================================
+
+      /*
+        IMPORTANT:
+
+        User must verify BOTH:
+
+        Email → Nodemailer OTP
+        Phone → Twilio OTP
+
+        BEFORE we create the actual user.
+      */
+
+      await registrationVerificationService
+        .checkBothVerified(
+          value.email
+        );
+
+
+      // =================================================
+      // 3. CREATE USER
+      // =================================================
+
+      const user =
+        await userService.createUser(
+          value
+        );
+
+
+      // =================================================
+      // 4. REGISTRATION SUCCESS
+      // =================================================
+
+      return res.status(201).json({
+
+        success: true,
+
+        message:
+          "User registered successfully",
+
+        data: {
+          user,
+        },
+      });
+
+    } catch (error) {
+
+      console.error(
+        "Registration error:",
+        error
+      );
+
+      return res.status(
+        error.statusCode || 500
+      ).json({
+
+        success: false,
+
         message:
           error.message ||
           "Internal server error",
@@ -243,47 +318,66 @@ async resendOtp(req, res) {
     }
   }
 
- 
+
+  // =====================================================
+  // OLD USER EMAIL OTP VERIFICATION
+  // =====================================================
+
   async verifyOtp(req, res) {
+
     try {
-      // 1. Validate OTP request
+
+      // Validate OTP request
       const { error, value } =
         validateVerifyOtp(req.body);
 
       if (error) {
+
         return res.status(400).json({
           success: false,
           message: "Validation failed",
-          errors: error.details.map(
-            (detail) => detail.message
-          ),
+
+          errors:
+            error.details.map(
+              (detail) =>
+                detail.message
+            ),
         });
       }
 
-      // 2. Verify OTP
+
+      // Verify OTP
       await otpService.verifyOtp(
         value.userId,
         value.code
       );
 
-      // 3. Mark user as verified
+
+      // Mark user as verified
       const user =
         await userService.markUserAsVerified(
           value.userId
         );
 
-      // 4. Send response
+
       return res.status(200).json({
+
         success: true,
+
         message:
           "Email verified successfully",
+
         data: user,
       });
+
     } catch (error) {
+
       return res.status(
         error.statusCode || 500
       ).json({
+
         success: false,
+
         message:
           error.message ||
           "Internal server error",
@@ -291,29 +385,48 @@ async resendOtp(req, res) {
     }
   }
 
+
+  // =====================================================
+  // LOGIN
+  // =====================================================
+
   async login(req, res) {
+
     try {
-      // 1. Validate login data
+
+      // =================================================
+      // 1. VALIDATE LOGIN DATA
+      // =================================================
+
       const { error, value } =
         validateLogin(req.body);
 
       if (error) {
+
         return res.status(400).json({
           success: false,
           message: "Validation failed",
-          errors: error.details.map(
-            (detail) => detail.message
-          ),
+
+          errors:
+            error.details.map(
+              (detail) =>
+                detail.message
+            ),
         });
       }
 
-      // 2. Find user by email
+
+      // =================================================
+      // 2. FIND USER
+      // =================================================
+
       const user =
         await userService.getUserByEmail(
           value.email
         );
 
       if (!user) {
+
         return res.status(401).json({
           success: false,
           message:
@@ -321,8 +434,13 @@ async resendOtp(req, res) {
         });
       }
 
-      // 3. Check email verification
+
+      // =================================================
+      // 3. CHECK EMAIL VERIFICATION
+      // =================================================
+
       if (!user.isVerified) {
+
         return res.status(403).json({
           success: false,
           message:
@@ -330,8 +448,11 @@ async resendOtp(req, res) {
         });
       }
 
-      // 4. Compare entered password
-      //    with bcrypt hash in MongoDB
+
+      // =================================================
+      // 4. CHECK PASSWORD
+      // =================================================
+
       const isPasswordValid =
         await userService.validatePassword(
           user,
@@ -339,6 +460,7 @@ async resendOtp(req, res) {
         );
 
       if (!isPasswordValid) {
+
         return res.status(401).json({
           success: false,
           message:
@@ -346,116 +468,232 @@ async resendOtp(req, res) {
         });
       }
 
-      // 5. Generate JWT access token
+
+      // =================================================
+      // 5. GENERATE ACCESS TOKEN
+      // =================================================
+
       const accessToken =
         generateAccessToken({
-          userId: user._id.toString(),
-          role: user.role,
-        });
-      
-      const refreshToken = generateRefreshToken({
-      userId: user._id.toString(),
-       role: user.role,
-      });
 
-      const expiresAt = new Date(
-       Date.now() + 7 * 24 * 60 * 60 * 1000
+          userId:
+            user._id.toString(),
+
+          role:
+            user.role,
+        });
+
+
+      // =================================================
+      // 6. GENERATE REFRESH TOKEN
+      // =================================================
+
+      const refreshToken =
+        generateRefreshToken({
+
+          userId:
+            user._id.toString(),
+
+          role:
+            user.role,
+        });
+
+
+      // =================================================
+      // 7. CREATE SESSION
+      // =================================================
+
+      const expiresAt =
+        new Date(
+          Date.now() +
+          7 *
+          24 *
+          60 *
+          60 *
+          1000
         );
 
-    await sessionService.createSession(
-     user._id,
-     refreshToken,
-      expiresAt
+
+      await sessionService.createSession(
+        user._id,
+        refreshToken,
+        expiresAt
       );
 
-      res.cookie("refreshToken", refreshToken, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-       sameSite: "strict",
-      maxAge: 7 * 24 * 60 * 60 * 1000,
-    });
-      
-      
 
-      // 6. Return successful login response
+      // =================================================
+      // 8. STORE REFRESH TOKEN IN HTTP-ONLY COOKIE
+      // =================================================
+
+      res.cookie(
+        "refreshToken",
+        refreshToken,
+        {
+
+          httpOnly: true,
+
+          secure:
+            process.env.NODE_ENV ===
+            "production",
+
+          sameSite: "strict",
+
+          maxAge:
+            7 *
+            24 *
+            60 *
+            60 *
+            1000,
+        }
+      );
+
+
+      // =================================================
+      // 9. LOGIN RESPONSE
+      // =================================================
+
       return res.status(200).json({
+
         success: true,
-        message: "Login successful",
+
+        message:
+          "Login successful",
+
         data: {
+
           accessToken,
 
           user: {
+
             id: user._id,
+
             name: user.name,
+
             email: user.email,
+
             role: user.role,
-            isVerified: user.isVerified,
+
+            isVerified:
+              user.isVerified,
           },
         },
       });
+
     } catch (error) {
+
+      console.error(
+        "Login error:",
+        error
+      );
+
       return res.status(
         error.statusCode || 500
       ).json({
+
         success: false,
+
         message:
           error.message ||
           "Internal server error",
       });
     }
-    }
-   
-    // Get the current user
-async me(req, res) {
-  try {
-    // req.user comes from authenticate middleware
-    const user =
-      await userService.getUserById(
-        req.user.userId
+  }
+
+
+  // =====================================================
+  // GET CURRENT USER
+  // =====================================================
+
+  async me(req, res) {
+
+    try {
+
+      // req.user comes from authenticate middleware
+
+      const user =
+        await userService.getUserById(
+          req.user.userId
+        );
+
+      if (!user) {
+
+        return res.status(404).json({
+          success: false,
+          message: "User not found",
+        });
+      }
+
+
+      return res.status(200).json({
+
+        success: true,
+
+        message:
+          "User profile fetched successfully",
+
+        data: {
+
+          user: {
+
+            id: user._id,
+
+            name: user.name,
+
+            email: user.email,
+
+            role: user.role,
+
+            isVerified:
+              user.isVerified,
+          },
+        },
+      });
+
+    } catch (error) {
+
+      console.error(
+        "Get Me Error:",
+        error
       );
 
-    if (!user) {
-      return res.status(404).json({
+      return res.status(
+        error.statusCode || 500
+      ).json({
+
         success: false,
-        message: "User not found",
+
+        message:
+          error.message ||
+          "Internal server error",
       });
     }
+  }
+
+
+  
+  // ADMIN AUTHORIZATION TEST// 
+
+  async adminTest(req, res) {
 
     return res.status(200).json({
+
       success: true,
-      message: "User profile fetched successfully",
+
+      message:
+        "Admin authorization successful",
+
       data: {
-        user: {
-          id: user._id,
-          name: user.name,
-          email: user.email,
-          role: user.role,
-          isVerified: user.isVerified,
-        },
+
+        userId:
+          req.user.userId,
+
+        role:
+          req.user.role,
       },
     });
-  } catch (error) {
-    console.error("Get Me Error:", error);
-
-    return res.status(
-      error.statusCode || 500
-    ).json({
-      success: false,
-      message:
-        error.message || "Internal server error",
-    });
   }
-    }
-    async adminTest(req, res) {
-  return res.status(200).json({
-    success: true,
-    message: "Admin authorization successful",
-    data: {
-      userId: req.user.userId,
-      role: req.user.role,
-    },
-  });
-}
 }
 
-module.exports = new AuthController();
+
+module.exports =
+  new AuthController();
