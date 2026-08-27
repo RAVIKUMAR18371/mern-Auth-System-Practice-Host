@@ -13,6 +13,8 @@ const {
 const sessionService =
   require("../session/session.service");
 
+const loginHistoryService = require("../login-history/login-history.service");
+  
 const {
   validateCreateUser,
 } = require("../../validators/user.validators");
@@ -66,6 +68,9 @@ class AuthController {
             "Session expired or revoked",
         });
       }
+
+      // Update last active time for this session
+      await sessionService.updateLastActive(session._id);
 
       // Generate new access token
       const accessToken =
@@ -266,10 +271,11 @@ class AuthController {
         BEFORE we create the actual user.
       */
 
-      await registrationVerificationService
-        .checkBothVerified(
-          value.email
-        );
+      const verification =
+        await registrationVerificationService
+          .checkBothVerified(
+            value.email
+          );
 
 
       // =================================================
@@ -277,9 +283,10 @@ class AuthController {
       // =================================================
 
       const user =
-        await userService.createUser(
-          value
-        );
+        await userService.createUser({
+          ...value,
+          phone: verification?.phone || req.body.phone
+        });
 
 
       // =================================================
@@ -386,218 +393,303 @@ class AuthController {
   }
 
 
-  // =====================================================
-  // LOGIN
-  // =====================================================
+  // Get Session
+  async getSessions(req, res) {
+  try {
 
-  async login(req, res) {
+    const refreshToken =
+      req.cookies.refreshToken;
 
+    const sessions =
+      await sessionService.getUserSessions(
+        req.user.userId
+      );
+
+    const formattedSessions =
+      sessions.map((session) => ({
+        sessionId: session._id,
+
+        device: session.device,
+
+        browser: session.browser,
+
+        operatingSystem:
+          session.operatingSystem,
+
+        ipAddress:
+          session.ipAddress,
+
+        lastActiveAt:
+          session.lastActiveAt,
+
+        createdAt:
+          session.createdAt,
+
+        current:
+          session.refreshToken ===
+          refreshToken,
+      }));
+
+    return res.status(200).json({
+      success: true,
+      message:
+        "Active sessions fetched successfully",
+      data: {
+        sessions: formattedSessions,
+      },
+    });
+
+  } catch (error) {
+
+    console.error(
+      "Get sessions error:",
+      error
+    );
+
+    return res.status(500).json({
+      success: false,
+      message:
+        "Failed to fetch active sessions",
+    });
+  }
+}
+
+  // Revoke Specific Session
+  async revokeSession(req, res) {
     try {
+      const { sessionId } = req.params;
+      const userId = req.user.userId;
 
-      // =================================================
-      // 1. VALIDATE LOGIN DATA
-      // =================================================
-
-      const { error, value } =
-        validateLogin(req.body);
-
-      if (error) {
-
+      if (!sessionId) {
         return res.status(400).json({
           success: false,
-          message: "Validation failed",
-
-          errors:
-            error.details.map(
-              (detail) =>
-                detail.message
-            ),
+          message: "Session ID is required",
         });
       }
 
+      const revokedSession = await sessionService.revokeSessionById(sessionId, userId);
 
-      // =================================================
-      // 2. FIND USER
-      // =================================================
-
-      const user =
-        await userService.getUserByEmail(
-          value.email
-        );
-
-      if (!user) {
-
-        return res.status(401).json({
+      if (!revokedSession) {
+        return res.status(404).json({
           success: false,
-          message:
-            "Invalid email or password",
+          message: "Session not found or already revoked",
         });
       }
-
-
-      // =================================================
-      // 3. CHECK EMAIL VERIFICATION
-      // =================================================
-
-      if (!user.isVerified) {
-
-        return res.status(403).json({
-          success: false,
-          message:
-            "Please verify your email first",
-        });
-      }
-
-
-      // =================================================
-      // 4. CHECK PASSWORD
-      // =================================================
-
-      const isPasswordValid =
-        await userService.validatePassword(
-          user,
-          value.password
-        );
-
-      if (!isPasswordValid) {
-
-        return res.status(401).json({
-          success: false,
-          message:
-            "Invalid email or password",
-        });
-      }
-
-
-      // =================================================
-      // 5. GENERATE ACCESS TOKEN
-      // =================================================
-
-      const accessToken =
-        generateAccessToken({
-
-          userId:
-            user._id.toString(),
-
-          role:
-            user.role,
-        });
-
-
-      // =================================================
-      // 6. GENERATE REFRESH TOKEN
-      // =================================================
-
-      const refreshToken =
-        generateRefreshToken({
-
-          userId:
-            user._id.toString(),
-
-          role:
-            user.role,
-        });
-
-
-      // =================================================
-      // 7. CREATE SESSION
-      // =================================================
-
-      const expiresAt =
-        new Date(
-          Date.now() +
-          7 *
-          24 *
-          60 *
-          60 *
-          1000
-        );
-
-
-      await sessionService.createSession(
-        user._id,
-        refreshToken,
-        expiresAt
-      );
-
-
-      // =================================================
-      // 8. STORE REFRESH TOKEN IN HTTP-ONLY COOKIE
-      // =================================================
-
-      res.cookie(
-        "refreshToken",
-        refreshToken,
-        {
-
-          httpOnly: true,
-
-          secure:
-            process.env.NODE_ENV ===
-            "production",
-
-          sameSite: "strict",
-
-          maxAge:
-            7 *
-            24 *
-            60 *
-            60 *
-            1000,
-        }
-      );
-
-
-      // =================================================
-      // 9. LOGIN RESPONSE
-      // =================================================
 
       return res.status(200).json({
-
         success: true,
-
-        message:
-          "Login successful",
-
-        data: {
-
-          accessToken,
-
-          user: {
-
-            id: user._id,
-
-            name: user.name,
-
-            email: user.email,
-
-            role: user.role,
-
-            isVerified:
-              user.isVerified,
-          },
-        },
+        message: "Session revoked successfully",
       });
-
     } catch (error) {
-
-      console.error(
-        "Login error:",
-        error
-      );
-
-      return res.status(
-        error.statusCode || 500
-      ).json({
-
+      console.error("Revoke session error:", error);
+      return res.status(500).json({
         success: false,
-
-        message:
-          error.message ||
-          "Internal server error",
+        message: "Failed to revoke session",
       });
     }
   }
+
+  // Revoke All Other Sessions
+  async revokeOtherSessions(req, res) {
+    try {
+      const refreshToken = req.cookies.refreshToken;
+      const userId = req.user.userId;
+
+      await sessionService.revokeOtherSessions(userId, refreshToken);
+
+      return res.status(200).json({
+        success: true,
+        message: "All other sessions revoked successfully",
+      });
+    } catch (error) {
+      console.error("Revoke other sessions error:", error);
+      return res.status(500).json({
+        success: false,
+        message: "Failed to revoke other sessions",
+      });
+    }
+  }
+
+  // =====================================================
+  // LOGIN
+  // =====================================================
+async login(req, res) {
+  try {
+    // ==========================================
+    // 1. VALIDATE LOGIN DATA
+    // ==========================================
+    const { error, value } =
+      validateLogin(req.body);
+
+    if (error) {
+      return res.status(400).json({
+        success: false,
+        message: "Validation failed",
+        errors: error.details.map(
+          (detail) => detail.message
+        ),
+      });
+    }
+
+    // ==========================================
+    // 2. FIND USER (By Email, Phone, or Identifier)
+    // ==========================================
+    const identifier = value.email || value.phone || value.identifier;
+    const user =
+      await userService.getUserByEmailOrPhone(
+        identifier
+      );
+
+    // User does not exist
+    if (!user) {
+      return res.status(401).json({
+        success: false,
+        message: "Invalid email or password",
+      });
+    }
+
+    // ==========================================
+    // 3. CHECK EMAIL VERIFICATION
+    // ==========================================
+    if (!user.isVerified) {
+      await loginHistoryService.recordLoginAttempt({
+        userId: user._id,
+        status: "FAILED",
+        req,
+        failureReason: "Email not verified",
+      });
+
+      return res.status(403).json({
+        success: false,
+        message:
+          "Please verify your email first",
+      });
+    }
+
+    // ==========================================
+    // 4. CHECK PASSWORD
+    // ==========================================
+    const isPasswordValid =
+      await userService.validatePassword(
+        user,
+        value.password
+      );
+
+    // Invalid password
+    if (!isPasswordValid) {
+      // Record failed login
+      await loginHistoryService.recordLoginAttempt({
+        userId: user._id,
+        status: "FAILED",
+        req,
+        failureReason:
+          "Invalid password",
+      });
+
+      return res.status(401).json({
+        success: false,
+        message: "Invalid email or password",
+      });
+    }
+
+    // ==========================================
+    // 5. GENERATE ACCESS TOKEN
+    // ==========================================
+    const accessToken =
+      generateAccessToken({
+        userId: user._id.toString(),
+        role: user.role,
+      });
+
+    // ==========================================
+    // 6. GENERATE REFRESH TOKEN
+    // ==========================================
+    const refreshToken =
+      generateRefreshToken({
+        userId: user._id.toString(),
+        role: user.role,
+      });
+
+    // ==========================================
+    // 7. CREATE SESSION
+    // ==========================================
+    const expiresAt = new Date(
+      Date.now() +
+        7 * 24 * 60 * 60 * 1000
+    );
+
+    await sessionService.createSession(
+      user._id,
+      refreshToken,
+      expiresAt,
+      req
+    );
+
+    // ==========================================
+    // 8. SET REFRESH TOKEN COOKIE
+    // ==========================================
+    res.cookie(
+      "refreshToken",
+      refreshToken,
+      {
+        httpOnly: true,
+
+        secure:
+          process.env.NODE_ENV ===
+          "production",
+
+        sameSite: "strict",
+
+        maxAge:
+          7 * 24 * 60 * 60 * 1000,
+      }
+    );
+
+    // ==========================================
+    // 9. RECORD SUCCESSFUL LOGIN
+    // ==========================================
+    await loginHistoryService.recordLoginAttempt({
+      userId: user._id,
+      status: "SUCCESS",
+      req,
+    });
+
+    // ==========================================
+    // 10. RETURN RESPONSE
+    // ==========================================
+    return res.status(200).json({
+      success: true,
+      message: "Login successful",
+
+      data: {
+        accessToken,
+
+        user: {
+          id: user._id,
+          name: user.name,
+          email: user.email,
+          role: user.role,
+          isVerified: user.isVerified,
+        },
+      },
+    });
+
+  } catch (error) {
+    console.error(
+      "Login controller error:",
+      error
+    );
+
+    return res.status(
+      error.statusCode || 500
+    ).json({
+      success: false,
+      message:
+        error.message ||
+        "Internal server error",
+    });
+  }
+}
 
 
   // =====================================================

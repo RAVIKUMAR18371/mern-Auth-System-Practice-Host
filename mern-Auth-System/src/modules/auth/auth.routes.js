@@ -2,6 +2,10 @@ const express = require("express");
 
 const router = express.Router();
 
+const loginHistoryController = require("../login-history/login-history.controller");
+
+const passwordResetController = require("../password-reset/password-reset.controller");
+
 const authController = require("./auth.controller");
 
 const {
@@ -60,7 +64,25 @@ router.get(
 );
 
 
+router.get(
+  "/sessions",
+  authenticate,
+  authController.getSessions.bind(authController)
+);
 
+// Revoke all other active sessions
+router.delete(
+  "/sessions",
+  authenticate,
+  authController.revokeOtherSessions.bind(authController)
+);
+
+// Revoke specific session by ID
+router.delete(
+  "/sessions/:sessionId",
+  authenticate,
+  authController.revokeSession.bind(authController)
+);
 
 // ADMIN ONLY
 router.get(
@@ -68,6 +90,64 @@ router.get(
   authenticate,
   authorize("admin"),
   authController.adminTest.bind(authController)
+);
+
+//
+// LOGIN HISTORY ROUTES
+//
+
+// Get complete login history
+router.get(
+  "/login-history",
+  authenticate,
+  loginHistoryController.getLoginHistory.bind(
+    loginHistoryController
+  )
+);
+
+// Get recent login history
+router.get(
+  "/login-history/recent",
+  authenticate,
+  loginHistoryController.getRecentLoginHistory.bind(
+    loginHistoryController
+  )
+);
+
+// Clear login history
+router.delete(
+  "/login-history",
+  authenticate,
+  loginHistoryController.clearLoginHistory.bind(
+    loginHistoryController
+  )
+);
+
+
+// PASSWORD RESET ROUTES
+
+// Forgot Password
+router.post(
+  "/forgot-password",
+  passwordResetController.forgotPassword.bind(
+    passwordResetController
+  )
+);
+
+// Verify Password Reset OTP
+router.post(
+  "/verify-reset-otp",
+  passwordResetController.verifyResetOtp.bind(
+    passwordResetController
+  )
+);
+
+// Reset Password with OTP
+router.post(
+  "/reset-password",
+  passwordResetController.resetPassword.bind(
+    passwordResetController
+  )
 );
 
 module.exports = router;

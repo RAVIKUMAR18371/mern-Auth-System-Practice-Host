@@ -6,3 +6,9 @@ node_modules/
 dist/
 build/
 npm-debug.log*
+
+
+# Environment variables
+.env
+.env.*
+!.env.example

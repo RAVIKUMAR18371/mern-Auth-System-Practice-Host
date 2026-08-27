@@ -27,6 +27,8 @@ class UserService {
     const user = await userRepository.create({
       ...userData,
       password: hashedPassword,
+      isVerified: true,
+      emailVerifiedAt: new Date(),
     });
 
     return toUserResponse(user);
@@ -34,6 +36,10 @@ class UserService {
 
   async getUserByEmail(email) {
     return userRepository.findByEmail(email);
+  }
+
+  async getUserByEmailOrPhone(identifier) {
+    return userRepository.findByEmailOrPhone(identifier);
   }
 
   async getUserById(id) {
@@ -48,8 +54,8 @@ class UserService {
   }
 
   async findById(userId) {
-  return User.findById(userId);
-}
+    return userRepository.findById(userId);
+  }
 
   async markUserAsVerified(userId) {
     const user =

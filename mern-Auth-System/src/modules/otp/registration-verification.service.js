@@ -24,6 +24,21 @@ const {
 const AppError =
   require("../../utils/app-error");
 
+const formatPhoneNumber = (phone) => {
+  if (!phone) return "";
+  let cleaned = String(phone).replace(/\D/g, "");
+  if (cleaned.length === 12 && cleaned.startsWith("91")) {
+    return "+" + cleaned;
+  }
+  if (cleaned.length === 11 && cleaned.startsWith("0")) {
+    cleaned = cleaned.substring(1);
+  }
+  if (cleaned.length === 10) {
+    return "+91" + cleaned;
+  }
+  return phone.startsWith("+") ? phone : "+" + cleaned;
+};
+
 class RegistrationVerificationService {
 
   // =====================================================
@@ -33,6 +48,7 @@ class RegistrationVerificationService {
   async sendEmailOtp(email, phone) {
 
     email = email.toLowerCase().trim();
+    phone = formatPhoneNumber(phone);
     phone = phone.trim();
 
     // Check if user already exists
@@ -150,6 +166,8 @@ class RegistrationVerificationService {
       );
     }
 
+    otp = String(otp).trim();
+
     const valid =
       await comparePassword(
         otp,
@@ -186,7 +204,7 @@ class RegistrationVerificationService {
   async sendPhoneOtp(email, phone) {
 
     email = email.toLowerCase().trim();
-    phone = phone.trim();
+    phone = formatPhoneNumber(phone);
 
     const existingUser =
       await userRepository.findByEmail(
@@ -299,6 +317,8 @@ class RegistrationVerificationService {
         400
       );
     }
+
+    otp = String(otp).trim();
 
     const valid =
       await comparePassword(

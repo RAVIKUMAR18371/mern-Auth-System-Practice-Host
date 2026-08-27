@@ -28,10 +28,10 @@ const sendOtpSms = async (phone, otp) => {
       "Twilio SMS error:",
       error.message
     );
-
-    throw new Error(
-      "Unable to send OTP SMS"
-    );
+    console.log(`========================================`);
+    console.log(`[DEV OTP FALLBACK] PHONE OTP for ${phone}: ${otp}`);
+    console.log(`========================================`);
+    return { fallback: true, otp };
   }
 };
 
