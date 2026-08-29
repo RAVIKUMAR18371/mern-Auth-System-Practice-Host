@@ -1,10 +1,27 @@
-const dotenv = require("dotenv");
+require("dotenv").config();
 
-dotenv.config();
+const {
+  PORT = 5000,
+  MONGODB_URI,
+  JWT_SECRET,
+  REFRESH_TOKEN_SECRET,
+  NODEMAILER_EMAIL,
+  NODEMAILER_PASS,
+  TWILIO_ACCOUNT_SID,
+  TWILIO_AUTH_TOKEN,
+  TWILIO_PHONE_NUMBER,
+  FRONTEND_URL
+} = process.env;
 
-const env = {
-    PORT: process.env.PORT || 5000,
-    MONGO_URI: process.env.MONGO_URI,
+module.exports = {
+  PORT,
+  MONGODB_URI,
+  JWT_SECRET,
+  REFRESH_TOKEN_SECRET,
+  NODEMAILER_EMAIL,
+  NODEMAILER_PASS,
+  TWILIO_ACCOUNT_SID,
+  TWILIO_AUTH_TOKEN,
+  TWILIO_PHONE_NUMBER,
+  FRONTEND_URL
 };
-
-module.exports = env;
