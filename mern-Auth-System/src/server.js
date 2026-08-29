@@ -2,7 +2,9 @@ require("dotenv").config();
 
 const app = require("./app");
 const connectDB = require("./database/mongodb");
-const { PORT } = require("./config/env");
+
+// Use PORT from environment (provided by Render) or fallback to config
+const PORT = process.env.PORT || require("./config/env").PORT;
 
 const startServer = async () => {
     await connectDB();
