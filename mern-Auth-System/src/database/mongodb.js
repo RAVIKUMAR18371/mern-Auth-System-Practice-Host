@@ -1,14 +1,11 @@
-const mongoose = require('mongoose')
-
-const { MONGO_URI } = require("../config/env");
+const mongoose = require("mongoose");
 
 const connectDB = async () => {
     try {
-        await mongoose.connect(MONGO_URI);
-        console.log("MongoDB connected successfully")
-    }
-    catch (error) {
-        console.log("MongoDB connected failed", error.message)
+        const conn = await mongoose.connect(process.env.MONGODB_URI);
+        console.log(`MongoDB Connected: ${conn.connection.host}`);
+    } catch (error) {
+        console.error(`Error: ${error.message}`);
         process.exit(1);
     }
 };

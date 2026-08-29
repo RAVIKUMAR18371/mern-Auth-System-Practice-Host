@@ -1,108 +1,54 @@
-# MERN Authentication & Authorization System
+# MERN Authentication System
 
 A production-style authentication and authorization backend built using the MERN stack.
 
-I built this project step-by-step to understand how authentication actually works in a real backend application instead of only implementing a simple login and signup page.
+## Project Structure
 
-The main focus of this project is:
+- `frontend/` - React/Vite frontend application
+- `mern-Auth-System/` - Node.js/Express backend application
 
-- User Registration
-- Password Hashing using bcrypt
-- Email OTP Verification
-- Login Authentication
-- JWT Access Tokens
-- JWT Refresh Tokens
-- Session Management
-- Protected Routes
-- Role-Based Authorization
-- Logout and Session Revocation
-- Resend OTP
-- REST API architecture
-- Modular backend structure
-- Validation and error handling
+## Deployment
 
+This application is designed to be deployed with:
+- Frontend: Vercel
+- Backend: Render (or similar Node.js hosting)
+- Database: MongoDB Atlas
 
-# 1. Project Overview
+## Environment Variables
 
-This project is a backend authentication system developed using Node.js, Express.js and MongoDB.
+### Backend (Render)
+- `PORT` - Auto-assigned by Render
+- `MONGODB_URI` - MongoDB Atlas connection string
+- `JWT_SECRET` - Secret for JWT signing
+- `REFRESH_TOKEN_SECRET` - Secret for refresh token signing
+- `NODEMAILER_EMAIL` - Email for sending OTPs
+- `NODEMAILER_PASS` - Email password or app password
+- `TWILIO_ACCOUNT_SID` - Twilio account SID (optional)
+- `TWILIO_AUTH_TOKEN` - Twilio auth token (optional)
+- `TWILIO_PHONE_NUMBER` - Twilio phone number (optional)
+- `FRONTEND_URL` - URL of your deployed frontend
 
-The main purpose of building this project was to understand how a real authentication system works internally.
+### Frontend (Vercel)
+- `VITE_API_URL` - URL of your deployed backend
 
-A user can:
+## Local Development
 
-1. Register an account.
-2. Enter a password.
-3. Password gets hashed using bcrypt.
-4. An OTP is generated.
-5. OTP is stored in MongoDB.
-6. OTP is sent to the user's email.
-7. User verifies the OTP.
-8. Account becomes verified.
-9. User can login.
-10. Server generates an Access Token and Refresh Token.
-11. Access Token is used to access protected APIs.
-12. Refresh Token is used to generate a new Access Token.
-13. Sessions are stored in MongoDB.
-14. User can logout.
-15. Logout revokes the refresh-token session.
-16. User can resend OTP if required.
-17. Role-based authorization protects admin-only routes.
+1. Install dependencies:
+   ```bash
+   # Backend
+   cd mern-Auth-System
+   npm install
 
----
+   # Frontend
+   cd frontend
+   npm install
 
-# 2. Technology Stack
+2. Set up environment variables in .env files
 
-## Backend
+3. Start development servers:
 
-- Node.js
-- Express.js
-- JavaScript
-- REST APIs
+# Backend (in mern-Auth-System)
+npm run dev
 
-## Database
-
-- MongoDB
-- Mongoose
-
-## Authentication & Security
-
-- JWT
-- bcryptjs
-- HTTP-only Cookies
-- OTP Verification
-- Role-Based Authorization
-
-## Development Tools
-
-- Postman
-- Nodemon
-- dotenv
-- Git
-
----
-
-3. Main Features
-
-User Registration
-
-A new user can register using:
-
-- Name
-- Email
-- Password
-
-Before saving the password into MongoDB, the password is hashed using bcrypt.
-
-The original password is never stored directly.
-
-Example:
-
-User Password
-      ↓
-bcrypt
-      ↓
-Hashed Password
-      ↓
-MongoDB
-
-
+# Frontend (in frontend)
+npm run dev
